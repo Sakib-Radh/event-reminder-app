@@ -22,5 +22,6 @@ Route::post('login', [AuthController::class, 'login']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::apiResource('/tasks', TaskController::class);
+    Route::post('/event/import-csv', [EventController::class, 'importCsv']);
     Route::apiResource('/event', EventController::class);
 });

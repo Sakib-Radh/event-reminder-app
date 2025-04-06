@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Event;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 
 class EventController extends Controller
 {
@@ -123,5 +124,49 @@ class EventController extends Controller
         $event->delete();
     
         return response()->json(['message' => 'Event deleted successfully.']);
+    }
+
+    public function importCsv(Request $request)
+    {
+        $request->validate([
+            'csv_file' => 'required|file|mimes:csv,txt',
+        ]);
+
+        $file = $request->file('csv_file');
+        $path = $file->getRealPath();
+        $data = array_map('str_getcsv', file($path));
+        $header = array_map('strtolower', array_map('trim', $data[0]));
+
+        $events = [];
+
+        foreach (array_slice($data, 1) as $row) {
+            $row = array_combine($header, $row);
+
+            // Validate each row
+            $validator = Validator::make($row, [
+                'title' => 'required|string|max:255',
+                'event_time' => 'required|date',
+            ]);
+
+            if ($validator->fails()) {
+                continue;
+            }
+
+            $events[] = [
+                'user_id' => $request->user()->id,
+                'title' => $row['title'],
+                'description' => $row['description'] ?? null,
+                'event_time' => $row['event_time'],
+                'unique_id' => uniqid('event_'),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }
+
+        if (!empty($events)) {
+            Event::insert($events);
+        }
+
+        return response()->json(['message' => 'CSV uploaded successfully.', 'imported' => count($events)]);
     }
 }

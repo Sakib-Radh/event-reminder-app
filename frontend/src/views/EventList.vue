@@ -2,6 +2,9 @@
   <div class="container mt-5">
     <h2>Your Events</h2>
 
+    <!-- CSV Upload Form -->
+    <CsvUpload @updateEventList="getEventList" />
+
     <!-- Form to Add Event -->
     <div class="event-form mb-4">
       <h3>Create New Event</h3>
@@ -85,8 +88,8 @@
 <script setup>
   import { ref, onMounted, onBeforeUnmount } from 'vue';
   import axios from '../services/axios';
-  
-  // Reactive references for events and form data
+  import CsvUpload from '@/components/CsvUpload.vue';
+
   const events = ref([]);
   const newEvent = ref({
     title: '',
@@ -96,8 +99,7 @@
   const editingEvent = ref(null);
   const loading = ref(false);
   const notification = ref([]);
-
-
+  
   const checkUpcomingEvents = async () => {
     let events = await fetchEvents(true);
 
