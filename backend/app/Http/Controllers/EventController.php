@@ -3,12 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Models\Event;
+use App\Repositories\EventRepository;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
 class EventController extends Controller
 {
+    protected $eventRepo;
+
+    public function __construct(EventRepository $eventRepo)
+    {
+        $this->eventRepo = $eventRepo;
+    }
     /**
      * Display a listing of the resource.
      *
@@ -47,12 +54,11 @@ class EventController extends Controller
             'event_time' => 'required|date',
         ]);
 
-        $event = Event::create([
+        $event = $this->eventRepo->createEvent([
             'user_id' => auth()->id(),
             'title' => $request->title,
             'description' => $request->description,
             'event_time' => $request->event_time,
-            'unique_id' => uniqid('event_'),
         ]);
 
         return response()->json($event, 201);
@@ -105,11 +111,9 @@ class EventController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $event = Event::where('user_id', auth()->id())->findOrFail($id);
+        $event = $this->eventRepo->updateEvent($id, $request->only('title', 'description', 'event_time'));
 
-        $event->update($request->only('title', 'description', 'event_time'));
-
-        return response()->json($event, 201);;
+        return response()->json($event, 201);
     }
 
     /**
@@ -120,53 +124,19 @@ class EventController extends Controller
      */
     public function destroy($id)
     {
-        $event = Event::where('user_id', auth()->id())->findOrFail($id);
-        $event->delete();
-    
+        $this->eventRepo->deleteEvent($id, auth()->id());
         return response()->json(['message' => 'Event deleted successfully.']);
     }
 
+    // CSV file import
     public function importCsv(Request $request)
     {
         $request->validate([
             'csv_file' => 'required|file|mimes:csv,txt',
         ]);
 
-        $file = $request->file('csv_file');
-        $path = $file->getRealPath();
-        $data = array_map('str_getcsv', file($path));
-        $header = array_map('strtolower', array_map('trim', $data[0]));
+        $importedCount = $this->eventRepo->importCsv($request);
 
-        $events = [];
-
-        foreach (array_slice($data, 1) as $row) {
-            $row = array_combine($header, $row);
-
-            // Validate each row
-            $validator = Validator::make($row, [
-                'title' => 'required|string|max:255',
-                'event_time' => 'required|date',
-            ]);
-
-            if ($validator->fails()) {
-                continue;
-            }
-
-            $events[] = [
-                'user_id' => $request->user()->id,
-                'title' => $row['title'],
-                'description' => $row['description'] ?? null,
-                'event_time' => $row['event_time'],
-                'unique_id' => uniqid('event_'),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ];
-        }
-
-        if (!empty($events)) {
-            Event::insert($events);
-        }
-
-        return response()->json(['message' => 'CSV uploaded successfully.', 'imported' => count($events)]);
+        return response()->json(['message' => 'CSV uploaded successfully.', 'imported' => $importedCount]);
     }
 }
