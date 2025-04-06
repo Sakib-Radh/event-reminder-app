@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Event;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 class EventController extends Controller
@@ -62,10 +63,25 @@ class EventController extends Controller
      * @param  \App\Models\Event  $event
      * @return \Illuminate\Http\Response
      */
-    public function show($id)
+    public function show(Request $request, $upcomingEvent)
     {
-        $event = Event::where('user_id', auth()->id())->findOrFail($id);
-        return response()->json($event, 201);
+        if (!auth()->check()) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $user_id = $request->user()->id;
+        $currentTime = Carbon::now();
+        $thirtyMinutesLater = Carbon::now()->addMinutes(30);
+
+        // Get events that will occur within the next 30 minutes
+        $events = Event::where('user_id', $user_id)
+                        ->where('event_time', '>', $currentTime)
+                       ->where('event_time', '<=', $thirtyMinutesLater)
+                       ->get();
+
+        return response()->json([
+            'data' => $events
+        ]);
     }
 
     /**
