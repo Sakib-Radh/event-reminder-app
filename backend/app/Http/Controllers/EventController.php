@@ -3,10 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Models\Event;
+use App\Repositories\EventRepository;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 
 class EventController extends Controller
 {
+    protected $eventRepo;
+
+    public function __construct(EventRepository $eventRepo)
+    {
+        $this->eventRepo = $eventRepo;
+    }
     /**
      * Display a listing of the resource.
      *
@@ -45,12 +54,11 @@ class EventController extends Controller
             'event_time' => 'required|date',
         ]);
 
-        $event = Event::create([
+        $event = $this->eventRepo->createEvent([
             'user_id' => auth()->id(),
             'title' => $request->title,
             'description' => $request->description,
             'event_time' => $request->event_time,
-            'unique_id' => uniqid('event_'),
         ]);
 
         return response()->json($event, 201);
@@ -62,10 +70,25 @@ class EventController extends Controller
      * @param  \App\Models\Event  $event
      * @return \Illuminate\Http\Response
      */
-    public function show($id)
+    public function show(Request $request, $upcomingEvent)
     {
-        $event = Event::where('user_id', auth()->id())->findOrFail($id);
-        return response()->json($event, 201);
+        if (!auth()->check()) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $user_id = $request->user()->id;
+        $currentTime = Carbon::now();
+        $thirtyMinutesLater = Carbon::now()->addMinutes(30);
+
+        // Get events that will occur within the next 30 minutes
+        $events = Event::where('user_id', $user_id)
+                        ->where('event_time', '>', $currentTime)
+                       ->where('event_time', '<=', $thirtyMinutesLater)
+                       ->get();
+
+        return response()->json([
+            'data' => $events
+        ]);
     }
 
     /**
@@ -88,11 +111,9 @@ class EventController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $event = Event::where('user_id', auth()->id())->findOrFail($id);
+        $event = $this->eventRepo->updateEvent($id, $request->only('title', 'description', 'event_time'));
 
-        $event->update($request->only('title', 'description', 'event_time'));
-
-        return response()->json($event, 201);;
+        return response()->json($event, 201);
     }
 
     /**
@@ -103,9 +124,19 @@ class EventController extends Controller
      */
     public function destroy($id)
     {
-        $event = Event::where('user_id', auth()->id())->findOrFail($id);
-        $event->delete();
-    
+        $this->eventRepo->deleteEvent($id, auth()->id());
         return response()->json(['message' => 'Event deleted successfully.']);
+    }
+
+    // CSV file import
+    public function importCsv(Request $request)
+    {
+        $request->validate([
+            'csv_file' => 'required|file|mimes:csv,txt',
+        ]);
+
+        $importedCount = $this->eventRepo->importCsv($request);
+
+        return response()->json(['message' => 'CSV uploaded successfully.', 'imported' => $importedCount]);
     }
 }
